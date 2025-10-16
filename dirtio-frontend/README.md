@@ -1,70 +1,126 @@
-# Getting Started with Create React App
+# dirt-io
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+`dirt-io` is a React-based mapping project with interactive overlays and custom polygon markers. This README helps developers get started quickly.
 
-## Available Scripts
+---
 
-In the project directory, you can run:
+## Table of Contents
 
-### `npm start`
+* [Getting Started](#getting-started)
+* [Frontend Components](#frontend-components)
+* [Environment Variables](#environment-variables)
+* [Generating Documentation](#generating-documentation)
+* [Tips for Developers](#tips-for-developers)
+* [Quick Commands](#quick-commands)
+* [Live App](#live-app)
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
+---
 
-The page will reload when you make changes.\
-You may also see any lint errors in the console.
+## Getting Started
 
-### `npm test`
+### 1. Clone the Repo
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+```bash
+git clone <your-repo-url>
+cd dirt-io
+```
 
-### `npm run build`
+### 2. Frontend Setup (React App)
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
+The frontend lives in `dirtio-frontend`:
 
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
+```bash
+cd dirtio-frontend
+npm install        # install dependencies
+npm start          # run development server
+```
 
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
+* App runs on `http://localhost:3000` by default.
+* Live reloads automatically when files change.
 
-### `npm run eject`
+---
 
-**Note: this is a one-way operation. Once you `eject`, you can't go back!**
+## Frontend Components
 
-If you aren't satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
+| Component      | Location                      | Description                                                                     |
+| -------------- | ----------------------------- | ------------------------------------------------------------------------------- |
+| `MapControl`   | `src/components/MapControl`   | Central component for Google Maps integration; handles overlays and UI buttons. |
+| `PolygonLayer` | `src/components/PolygonLayer` | Adds custom polygons to the map; can fetch polygon data via API.                |
 
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you're on your own.
+> Use `MapControl` as the **single parent** for all overlays to centralize state.
 
-You don't have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn't feel obligated to use this feature. However we understand that this tool wouldn't be useful if you couldn't customize it when you are ready for it.
+---
 
-## Learn More
+## Environment Variables
 
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
+Create a `.env` file in `dirtio-frontend`:
 
-To learn React, check out the [React documentation](https://reactjs.org/).
+```
+REACT_APP_GOOGLE_MAPS_API_KEY=your_api_key_here
+```
 
-### Code Splitting
+* Access in code: `process.env.REACT_APP_GOOGLE_MAPS_API_KEY`.
+* **Important:** Do not commit `.env` files containing secrets.
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/code-splitting](https://facebook.github.io/create-react-app/docs/code-splitting)
+---
 
-### Analyzing the Bundle Size
+## Generating Documentation
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size](https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size)
+### JSDoc (vanilla JS / JSX)
 
-### Making a Progressive Web App
+```bash
+cd dirtio-frontend
+npx jsdoc -c jsdoc.json
+```
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app](https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app)
+* HTML docs generated in `docs/`.
+* Open `docs/index.html` in a browser to view component API.
 
-### Advanced Configuration
+### TypeDoc (for TypeScript / TSX)
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/advanced-configuration](https://facebook.github.io/create-react-app/docs/advanced-configuration)
+```bash
+npx typedoc --out docs src
+```
 
-### Deployment
+* Fully supports TypeScript types and JSX components.
+* Docs also generated in `docs/`.
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/deployment](https://facebook.github.io/create-react-app/docs/deployment)
+> Links in README (if docs exist):
 
-### `npm run build` fails to minify
+* [Frontend API Documentation](dirtio-frontend/docs/index.html)
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
+---
+
+## Tips for Developers
+
+* Keep **one `MapControl`** per map; all overlays should be children.
+* Use `PolygonLayer` for custom polygon markers; future API calls can dynamically decide polygon shapes.
+* Keep API keys in `.env`; never commit them.
+* Build production frontend:
+
+```bash
+npm run build
+```
+
+* Deploy `build/` folder using static hosting or backend integration.
+
+---
+
+## Quick Commands
+
+| Command                           | Description               |
+| --------------------------------- | ------------------------- |
+| `cd dirtio-frontend && npm start` | Run frontend locally      |
+| `npm run build`                   | Build production frontend |
+| `npx jsdoc -c jsdoc.json`         | Generate HTML docs        |
+| `npx typedoc --out docs src`      | Generate TypeScript docs  |
+
+---
+
+## Live App
+
+If deployed (optional), add link here:
+
+[View Live App](#)
+
+> You can deploy with **Vercel**, **Netlify**, or **GitHub Pages**.
