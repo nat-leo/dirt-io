@@ -2,7 +2,7 @@
 SSURGO data, especially from the NRCS, is a treasure trove of information about the soils of the United States. There's entire 
 manuals on the collection of good data for this project. 
 
-This project contains an example dataset downloaded from the NRCS Web Soil Survey tool.
+This project contains an example dataset downloaded from the NRCS Web Soil Survey tool in the folder `Working with Soil/AZ649`
 
 Soil Survey Staff, Natural Resources Conservation Service, United States Department of Agriculture. Web Soil Survey. Available online at the following link: http://websoilsurvey.sc.egov.usda.gov/. Accessed [10/19/2025].
 
