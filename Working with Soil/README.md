@@ -4,8 +4,6 @@ manuals on the collection of good data for this project.
 
 This project contains an example dataset downloaded from the NRCS Web Soil Survey tool in the folder `Working with Soil/AZ649`
 
-Soil Survey Staff, Natural Resources Conservation Service, United States Department of Agriculture. Web Soil Survey. Available online at the following link: http://websoilsurvey.sc.egov.usda.gov/. Accessed [10/19/2025].
-
 ## Getting Started
 This is a large, complex geospatial dataset. It's split into `spatial` and `tabular` services. `spatial` data gives map polygons that 
 can be viewed on GIS tools. `tabular` data gives detailed information on the soil characteristics of each zone. We connect spatial and
@@ -43,3 +41,10 @@ curl -X POST "https://sdmdataaccess.nrcs.usda.gov/Tabular/post.rest" \
 ```
 {"Table":[["533592"]]}
 ```
+
+
+
+## References
+Soil Survey Staff, Natural Resources Conservation Service, United States Department of Agriculture. Web Soil Survey. Available online at the following link: http://websoilsurvey.sc.egov.usda.gov/. Accessed [10/19/2025].
+
+Soil Survey Staff, Natural Resources Conservation Service, United States Department of Agriculture. Official Soil Series Descriptions. Available online. Accessed [10/21/2025].
