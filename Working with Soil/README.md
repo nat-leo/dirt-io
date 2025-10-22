@@ -29,19 +29,6 @@ and the name of their mapunit key.
 | `cointerp` / `muinterp`      | Interpretations (e.g. suitability ratings) | `coiid`   |
 | `muaggatt`                   | Aggregated soil attributes per map unit    | `mukey`   |
 
-## But how do I find a mapunit?
-
-Coordinates can be used to find map units as well.
-
-```
-curl -X POST "https://sdmdataaccess.nrcs.usda.gov/Tabular/post.rest" \
-            --data "query=SELECT MUKEY FROM mapunit WHERE MUKEY IN (SELECT MUKEY from SDA_Get_Mukey_from_intersection_with_WktWgs84('POINT(<LONGITUDE> <LATITUDE>)'))&format=json" \
-            -H "Content-Type: application/x-www-form-urlencoded"
-```
-```
-{"Table":[["533592"]]}
-```
-
 ## References
 Soil Survey Staff, Natural Resources Conservation Service, United States Department of Agriculture. Web Soil Survey. Available online at the following link: http://websoilsurvey.sc.egov.usda.gov/. Accessed [10/19/2025].
 
