@@ -42,9 +42,8 @@ curl -X POST "https://sdmdataaccess.nrcs.usda.gov/Tabular/post.rest" \
 {"Table":[["533592"]]}
 ```
 
-
-
 ## References
 Soil Survey Staff, Natural Resources Conservation Service, United States Department of Agriculture. Web Soil Survey. Available online at the following link: http://websoilsurvey.sc.egov.usda.gov/. Accessed [10/19/2025].
 
 Soil Survey Staff, Natural Resources Conservation Service, United States Department of Agriculture. Official Soil Series Descriptions. Available online. Accessed [10/21/2025].
+
