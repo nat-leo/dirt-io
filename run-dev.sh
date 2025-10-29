@@ -75,7 +75,7 @@ trap cleanup SIGINT SIGTERM
 echo "\nStarting FastAPI backend..."
 cd backend
 source venv/bin/activate
-uvicorn main:app --reload &
+uvicorn soil:app --reload &
 BACKEND_PID=$!
 cd ..
 
