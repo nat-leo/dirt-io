@@ -1,15 +1,14 @@
 from fastapi import FastAPI, Query, HTTPException
 import requests
 
-app = FastAPI(title="Soil Data Access API Wrapper")
+app = FastAPI(title="Soil Data Access API", version="1.0.0")
 
 SDM_URL = "https://sdmdataaccess.nrcs.usda.gov/Tabular/post.rest"
 
-
 @app.get("/soil", summary="Query Soil Map Units by Coordinates")
 def get_soil_data(
-    lon: float = Query(..., description="Longitude (WGS84)"),
-    lat: float = Query(..., description="Latitude (WGS84)"),
+    lon: float = Query(..., description="Longitude (WGS84)", ge=-180, le=180),
+    lat: float = Query(..., description="Latitude (WGS84)", ge=-90, le=90),
 ):
     """
     Calls the USDA Soil Data Access API to get the map unit polygons
@@ -34,6 +33,7 @@ def get_soil_data(
     ...
     ]
     """
+
     query = f"""
     SELECT mup.mupolygonkey, mup.mukey, mup.mupolygongeo
     FROM mupolygon AS mup
