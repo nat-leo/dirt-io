@@ -1,42 +1,48 @@
 import React, { useState, useCallback, useEffect } from "react";
 import { Polygon } from "@react-google-maps/api";
 
-/**
- * PolygonLayer renders polygons on a Google Map for each click.
- *
- * @param {google.maps.Map} map - The Google Maps instance
- * @param {(location: {lat: number, lng: number}) => void} onClick
- *   Optional callback triggered after a polygon is added
- */
+// Convert WKT POLYGON string to Google Maps LatLngLiteral array
+function parseWktPolygon(wkt) {
+  return wkt
+    .replace("POLYGON ((", "")
+    .replace("))", "")
+    .trim()
+    .split(",")
+    .map((pair) => {
+      const [lng, lat] = pair.trim().split(/\s+/).map(Number);
+      return { lat, lng };
+    });
+}
+
 export default function PolygonLayer({ map, onClick }) {
   const [locations, setLocations] = useState([]);
 
-  /**
-   * Creates a polygon path around a center point.
-   *
-   * @param {number} lat - Latitude of the center
-   * @param {number} lng - Longitude of the center
-   * @returns {google.maps.LatLngLiteral[]} Array of coordinates forming a polygon
-   */
-  const createPolygonPath = (lat, lng) => {
-    const size = 0.0015;
-    return [
-      { lat: lat + size, lng: lng },
-      { lat: lat, lng: lng + size },
-      { lat: lat - size, lng: lng },
-      { lat: lat, lng: lng - size },
-    ];
-  };
-
   const handleMapClick = useCallback(
     async (e) => {
-      const newLocation = { lat: e.latLng.lat(), lng: e.latLng.lng() };
+      const lat = e.latLng.lat();
+      const lng = e.latLng.lng();
 
-      // Future: replace with API call to determine polygon properties
-      // const polygonData = await fetchPolygonFromAPI(newLocation);
+      try {
+        const res = await fetch(`http://localhost:8000/soil?lon=${lng}&lat=${lat}`);
+        if (!res.ok) throw new Error(`API error ${res.status}`);
+        const json = await res.json();
 
-      setLocations((prev) => [newLocation]); // setLocations((prev) => [...prev, newLocation]);
-      if (onClick) onClick(newLocation);
+        if (json.data && json.data.length > 0) {
+          // Use the first polygon from the API response
+          const wkt = json.data[0][2];
+          const path = parseWktPolygon(wkt);
+
+          // Store as a single location object with path
+          setLocations([{ lat, lng, path }]);
+
+          if (onClick) onClick({ lat, lng });
+        }
+      } catch (err) {
+        console.error("Error fetching polygon:", err);
+        // fallback: just store clicked point
+        setLocations([{ lat, lng }]);
+        if (onClick) onClick({ lat, lng });
+      }
     },
     [onClick]
   );
@@ -52,7 +58,13 @@ export default function PolygonLayer({ map, onClick }) {
       {locations.map((loc, i) => (
         <Polygon
           key={i}
-          paths={createPolygonPath(loc.lat, loc.lng)}
+          paths={loc.path || [
+            // fallback square if no API path yet
+            { lat: loc.lat + 0.0015, lng: loc.lng },
+            { lat: loc.lat, lng: loc.lng + 0.0015 },
+            { lat: loc.lat - 0.0015, lng: loc.lng },
+            { lat: loc.lat, lng: loc.lng - 0.0015 },
+          ]}
           options={{
             fillColor: "#FF0000",
             fillOpacity: 0.5,
