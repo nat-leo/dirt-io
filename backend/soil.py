@@ -1,5 +1,7 @@
 from fastapi import FastAPI, Query, HTTPException
 import requests
+import geopandas as gpd
+import shapely
 
 app = FastAPI(title="Soil Data Access API", version="1.0.0")
 
@@ -55,5 +57,34 @@ def get_soil_data(
 
     if "Table" not in data or not data["Table"]:
         return {"message": "No map unit polygons found for given coordinates"}
+    
+    polygon = find_polygon_with_coordinate(lat, lon, data["Table"])
 
-    return {"data": data["Table"]}
+    return {"data": polygon}
+
+def find_polygon_with_coordinate(lat: float, lon: float, polygons: list) -> list:
+    """
+    Given a list of polygons (as WKT strings) and a lat/lon point,
+    return the polygon that contains the point.
+    This is a stub function; actual implementation would require
+    a geometry library like Shapely to perform point-in-polygon tests.
+    """
+    point = shapely.Point(lon, lat)
+    df = gpd.GeoDataFrame(
+        polygons,
+        columns=['mupolygonkey', 'mukey', 'wkt']
+    )
+    df['geometry'] = df['wkt'].apply(shapely.wkt.loads)
+    df = df.drop(columns=['wkt'])
+
+    # Assign CRS (WGS84)
+    df = gpd.GeoDataFrame(df, geometry='geometry', crs="EPSG:4326")
+    
+    # Defensively, we're assuming there's still a chance of multiple matches
+    matches = df[df.geometry.contains(point)]
+    result = [ 
+        [row['mupolygonkey'], row['mukey'], row['geometry'].wkt]
+        for _, row in matches.iterrows()
+    ]
+
+    return result
