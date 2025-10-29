@@ -1,9 +1,18 @@
 from fastapi import FastAPI, Query, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 import requests
 import geopandas as gpd
 import shapely
 
 app = FastAPI(title="Soil Data Access API", version="1.0.0")
+# Allow all origins (for local dev)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000"],  # frontend origin
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 SDM_URL = "https://sdmdataaccess.nrcs.usda.gov/Tabular/post.rest"
 
