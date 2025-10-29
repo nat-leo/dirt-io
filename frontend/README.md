@@ -27,10 +27,10 @@ cd dirt-io
 
 ### 2. Frontend Setup (React App)
 
-The frontend lives in `dirtio-frontend`:
+The frontend lives in `frontend`:
 
 ```bash
-cd dirtio-frontend
+cd frontend
 npm install        # install dependencies
 npm start          # run development server
 ```
@@ -53,7 +53,7 @@ npm start          # run development server
 
 ## Environment Variables
 
-Create a `.env` file in `dirtio-frontend`:
+Create a `.env` file in `frontend`:
 
 ```
 REACT_APP_GOOGLE_MAPS_API_KEY=your_api_key_here
@@ -69,7 +69,7 @@ REACT_APP_GOOGLE_MAPS_API_KEY=your_api_key_here
 ### JSDoc (vanilla JS / JSX)
 
 ```bash
-cd dirtio-frontend
+cd frontend
 npx jsdoc -c jsdoc.json
 ```
 
@@ -87,7 +87,7 @@ npx typedoc --out docs src
 
 > Links in README (if docs exist):
 
-* [Frontend API Documentation](dirtio-frontend/docs/index.html)
+* [Frontend API Documentation](frontend/docs/index.html)
 
 ---
 
@@ -110,7 +110,7 @@ npm run build
 
 | Command                           | Description               |
 | --------------------------------- | ------------------------- |
-| `cd dirtio-frontend && npm start` | Run frontend locally      |
+| `cd frontend && npm start` | Run frontend locally      |
 | `npm run build`                   | Build production frontend |
 | `npx jsdoc -c jsdoc.json`         | Generate HTML docs        |
 | `npx typedoc --out docs src`      | Generate TypeScript docs  |
