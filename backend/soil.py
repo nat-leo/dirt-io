@@ -5,6 +5,7 @@ import geopandas as gpd
 import shapely
 
 app = FastAPI(title="Soil Data Access API", version="1.0.0")
+
 # Allow all origins (for local dev)
 app.add_middleware(
     CORSMiddleware,
@@ -15,6 +16,34 @@ app.add_middleware(
 )
 
 SDM_URL = "https://sdmdataaccess.nrcs.usda.gov/Tabular/post.rest"
+
+@app.get("/soil/sql", summary="Execute Arbitrary SQL Query on Soil Data Access API")
+def execute_soil_sql(
+    query: str = Query(..., description="SQL query to execute against the Soil Data Access API"),
+):
+    """
+    Executes an arbitrary SQL query against the USDA Soil Data Access API.
+
+    Example query:
+    SELECT * WHERE areasymbol = 'CA635'
+    SELECT mup.mupolygonkey, mup.mukey, mup.mupolygongeo FROM mupolygon AS mup WHERE mup.mukey IN (SELECT mukey FROM SDA_Get_Mukey_from_intersection_with_WktWgs84('POINT(-122.449871 37.492633)'))
+
+    
+    Note: Use with caution. This endpoint allows execution of any SQL query.
+    """
+
+    payload = {"query": query, "format": "json"}
+    headers = {"Content-Type": "application/x-www-form-urlencoded"}
+
+    try:
+        response = requests.post(SDM_URL, data=payload, headers=headers, timeout=20)
+        response.raise_for_status()
+        data = response.json()
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Upstream service error: {str(e)}")
+
+    return data
+
 
 @app.get("/soil", summary="Query Soil Map Units by Coordinates")
 def get_soil_data(
@@ -97,3 +126,4 @@ def find_polygon_with_coordinate(lat: float, lon: float, polygons: list) -> list
     ]
 
     return result
+
