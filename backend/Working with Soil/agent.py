@@ -10,9 +10,15 @@ You can run it like this from the Working with Soil directory:
 ./ssurgo-to-sqlite.sh AZ649/soildb_US_2003.mdb
 
 """
+import os
+import json
 import sqlite3
 import openai
-import json
+import dotenv
+
+
+dotenv.load_dotenv()
+client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 # Connect to the SSURGO database
 conn = sqlite3.connect("ssurgo_az649.db")
@@ -52,12 +58,12 @@ def prompt_llm(schema):
     The query should be valid and return soil data.
     Only output the SQL statement, no commentary.
     """
-    response = openai.ChatCompletion.create(
+    response = openai.chat.completions.create(
         model="gpt-4o-mini",
         messages=[{"role": "user", "content": prompt}],
         temperature=0.7
     )
-    sql = response["choices"][0]["message"]["content"].strip()
+    sql = response.choices[0].message.content.strip()
     return sql
 
 # Main RL-like loop
