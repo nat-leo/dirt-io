@@ -1,6 +1,7 @@
 'use client';
+
 import api from '@/lib/api';
-import {useRef, useCallback, useState, useEffect} from 'react';
+import { useRef, useCallback, useEffect, useState } from 'react';
 import maplibregl from 'maplibre-gl';
 import {
   Map as DeckGLMap,
@@ -10,82 +11,85 @@ import {
   Source,
   Layer,
 } from 'react-map-gl/maplibre';
+import type { FeatureCollection, Polygon } from 'geojson';
 import 'maplibre-gl/dist/maplibre-gl.css';
+
+type LngLat = { lng: number; lat: number };
+type PolygonFC = FeatureCollection<Polygon>;
+
+function getViewportCorners(map: MapRef): LngLat[] {
+  const bounds = map.getBounds();
+  const nw = bounds.getNorthWest();
+  const ne = bounds.getNorthEast();
+  const se = bounds.getSouthEast();
+  const sw = bounds.getSouthWest();
+
+  return [
+    { lng: nw.lng, lat: nw.lat },
+    { lng: ne.lng, lat: ne.lat },
+    { lng: se.lng, lat: se.lat },
+    { lng: sw.lng, lat: sw.lat },
+  ];
+}
 
 function Map() {
   const mapRef = useRef<MapRef | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [polygonData, setPolygonData] = useState<any>(null); // simple state for demo
+  const [polygonData, setPolygonData] = useState<PolygonFC | null>(null);
 
-  const logBounds = useCallback(() => {
-    const map = mapRef.current;
-    if(!map) return;
-    
-    const bounds = map.getBounds();
-    const nw = bounds.getNorthWest();
-    const ne = bounds.getNorthEast();
-    const se = bounds.getSouthEast();
-    const sw = bounds.getSouthWest();
-
-    console.log('Viewport corners:', {
-      nw: [nw.lng, nw.lat],
-      ne: [ne.lng, ne.lat],
-      se: [se.lng, se.lat],
-      sw: [sw.lng, sw.lat],
-    });
-
-  }, []);
-
-  const refreshPolygon = useCallback(() => {
+  const updatePolygonFromViewport = useCallback(() => {
     const map = mapRef.current;
     if (!map) return;
-    const bounds = map.getBounds();
-    const nw = bounds.getNorthWest();
-    const ne = bounds.getNorthEast();
-    const se = bounds.getSouthEast();
-    const sw = bounds.getSouthWest();
 
-    const coords = api.getMap(
-      {lng: nw.lng, lat: nw.lat},
-      {lng: ne.lng, lat: ne.lat},
-      {lng: se.lng, lat: se.lat},
-      {lng: sw.lng, lat: sw.lat},
-    );
+    const corners = getViewportCorners(map);
 
-    // Wrap returned points into a simple polygon (closed ring)
-    const ring = [...coords, coords[0]].map(({lng, lat}) => [lng, lat]);
-    setPolygonData({
+    // Logging stays in one place
+    console.log('Viewport corners:', corners);
+
+    // Assuming api.getMap accepts four corners as in your original code
+    const coords = api.getMap(corners[0], corners[1], corners[2], corners[3]);
+
+    // Wrap returned points into a simple closed polygon ring
+    const ring = [...coords, coords[0]].map(({ lng, lat }: LngLat) => [lng, lat] as [number, number]);
+
+    const geojson: PolygonFC = {
       type: 'FeatureCollection',
       features: [
         {
           type: 'Feature',
-          geometry: {type: 'Polygon', coordinates: [ring]},
+          geometry: {
+            type: 'Polygon',
+            coordinates: [ring],
+          },
           properties: {},
         },
       ],
-    });
+    };
+
+    setPolygonData(geojson);
   }, []);
 
-  const handleMove = useCallback((evt: ViewStateChangeEvent) => {
-    if(debounceRef.current) {
-      clearTimeout(debounceRef.current);
-    }
+  const handleMove = useCallback(
+    (_evt: ViewStateChangeEvent) => {
+      if (debounceRef.current) {
+        clearTimeout(debounceRef.current);
+      }
 
-    debounceRef.current = setTimeout(() => {
-      logBounds();
-      refreshPolygon();
-    }, 500);
+      debounceRef.current = setTimeout(() => {
+        updatePolygonFromViewport();
+      }, 500);
+    },
+    [updatePolygonFromViewport],
+  );
 
-  }, [logBounds, refreshPolygon]);
+  const handleLoad = useCallback(() => {
+    updatePolygonFromViewport();
+  }, [updatePolygonFromViewport]);
 
-  const handleLoad = () => {
-    refreshPolygon();
-  };
-
+  // Optional: if you want an initial fetch in case onLoad doesn’t fire
   useEffect(() => {
-    // initial fetch if map is already ready
-    refreshPolygon();
-  }, [refreshPolygon]);
+    updatePolygonFromViewport();
+  }, [updatePolygonFromViewport]);
 
   return (
     <div className="w-full h-[70vh] min-h-[360px]">
@@ -99,11 +103,10 @@ function Map() {
           latitude: 40,
           zoom: 3.5,
         }}
-        style={{width: '100%', height: '100%'}}
-        mapStyle="https://basemaps.cartocdn.com/gl/positron-gl-style/style.json" // light style
-        //mapStyle="https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json" // dark style
+        style={{ width: '100%', height: '100%' }}
+        mapStyle="https://basemaps.cartocdn.com/gl/positron-gl-style/style.json"
       >
-        {polygonData ? (
+        {polygonData && (
           <Source id="random-polygon" type="geojson" data={polygonData}>
             <Layer
               id="random-polygon-fill"
@@ -123,7 +126,8 @@ function Map() {
               }}
             />
           </Source>
-        ) : null}
+        )}
+
         <NavigationControl />
       </DeckGLMap>
     </div>
