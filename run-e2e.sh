@@ -8,8 +8,8 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WEB_DIR="$ROOT_DIR/web"
+HOST="${HOST:-$(ipconfig getifaddr en0 || hostname -I | awk '{print $1}')}"
 PORT="${PORT:-3000}"
-HOST="${HOST:-127.0.0.1}"
 
 command_exists() {
   command -v "$1" >/dev/null 2>&1
@@ -59,6 +59,6 @@ if [ -z "${READY:-}" ]; then
 fi
 
 echo "Running Playwright tests..."
-npx playwright test "$@"
+PLAYWRIGHT_BASE_URL="http://${HOST}:${PORT}" npx playwright test "$@"
 
 echo "E2E tests completed."

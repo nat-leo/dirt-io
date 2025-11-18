@@ -114,6 +114,14 @@ function Map({
     updatePolygonFromViewport();
   }, [updatePolygonFromViewport]);
 
+  // Expose map and current polygon to window for e2e test hooks only.
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      (window as any).__MAP__ = mapRef.current;
+      (window as any).__POLYGON__ = polygonData;
+    }
+  }, [polygonData]);
+
   return (
     <div className="w-full h-[70vh] min-h-[360px]">
       <DeckGLMap
