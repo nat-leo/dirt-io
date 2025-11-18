@@ -73,3 +73,4 @@ venv.bak/
 
 # secrets
 .env
+node_modules

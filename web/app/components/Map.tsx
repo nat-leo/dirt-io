@@ -14,10 +14,28 @@ import {
 import type { FeatureCollection, Polygon } from 'geojson';
 import 'maplibre-gl/dist/maplibre-gl.css';
 
-type LngLat = { lng: number; lat: number };
-type PolygonFC = FeatureCollection<Polygon>;
+type Coordinate = { lng: number; lat: number };
+type MapFeatureCollection = FeatureCollection<Polygon>;
 
-function getViewportCorners(map: MapRef): LngLat[] {
+type GetMapFn = (nw: Coordinate, ne: Coordinate, se: Coordinate, sw: Coordinate) => Coordinate[];
+
+interface MapProps {
+  getMap?: GetMapFn;
+  initialViewState?: { // Optional: let stories override initial view for testing
+    longitude: number;
+    latitude: number;
+    zoom: number;
+  };
+}
+
+type ViewportExtent = {
+  nw: Coordinate;
+  ne: Coordinate;
+  se: Coordinate;
+  sw: Coordinate;
+};
+
+function getViewportCorners(map: MapRef): Coordinate[] {
   const bounds = map.getBounds();
   const nw = bounds.getNorthWest();
   const ne = bounds.getNorthEast();
@@ -32,27 +50,33 @@ function getViewportCorners(map: MapRef): LngLat[] {
   ];
 }
 
-function Map() {
+function Map({
+  getMap = api.getMap, // default to real API in the app
+  initialViewState = {
+    longitude: -100,
+    latitude: 40,
+    zoom: 3.5,
+  },
+}: MapProps) {
   const mapRef = useRef<MapRef | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [polygonData, setPolygonData] = useState<PolygonFC | null>(null);
+  const [polygonData, setPolygonData] = useState<MapFeatureCollection | null>(null);
 
   const updatePolygonFromViewport = useCallback(() => {
     const map = mapRef.current;
     if (!map) return;
 
-    const corners = getViewportCorners(map);
+    const [nw, ne, se, sw] = getViewportCorners(map);
 
-    // Logging stays in one place
-    console.log('Viewport corners:', corners);
+    console.log('Viewport corners:', { nw, ne, se, sw });
 
-    // Assuming api.getMap accepts four corners as in your original code
-    const coords = api.getMap(corners[0], corners[1], corners[2], corners[3]);
+    const coords = getMap(nw, ne, se, sw);
 
-    // Wrap returned points into a simple closed polygon ring
-    const ring = [...coords, coords[0]].map(({ lng, lat }: LngLat) => [lng, lat] as [number, number]);
+    const ring = [...coords, coords[0]].map(
+      ({ lng, lat }: Coordinate) => [lng, lat] as [number, number],
+    );
 
-    const geojson: PolygonFC = {
+    const geojson: MapFeatureCollection = {
       type: 'FeatureCollection',
       features: [
         {
@@ -67,7 +91,7 @@ function Map() {
     };
 
     setPolygonData(geojson);
-  }, []);
+  }, [getMap]);
 
   const handleMove = useCallback(
     (_evt: ViewStateChangeEvent) => {
@@ -86,7 +110,6 @@ function Map() {
     updatePolygonFromViewport();
   }, [updatePolygonFromViewport]);
 
-  // Optional: if you want an initial fetch in case onLoad doesn’t fire
   useEffect(() => {
     updatePolygonFromViewport();
   }, [updatePolygonFromViewport]);
@@ -98,11 +121,7 @@ function Map() {
         onLoad={handleLoad}
         onMove={handleMove}
         mapLib={maplibregl}
-        initialViewState={{
-          longitude: -100,
-          latitude: 40,
-          zoom: 3.5,
-        }}
+        initialViewState={initialViewState}
         style={{ width: '100%', height: '100%' }}
         mapStyle="https://basemaps.cartocdn.com/gl/positron-gl-style/style.json"
       >
@@ -135,3 +154,4 @@ function Map() {
 }
 
 export default Map;
+export type { MapProps, GetMapFn, Coordinate, MapFeatureCollection, ViewportExtent };

@@ -1,5 +1,5 @@
 {
   "dependencies": {
-    "@react-google-maps/api": "^2.20.7"
+    "deck.gl": "^9.2.2"
   }
 }

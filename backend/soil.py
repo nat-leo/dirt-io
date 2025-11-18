@@ -25,9 +25,55 @@ def execute_soil_sql(
     Executes an arbitrary SQL query against the USDA Soil Data Access API.
 
     Example query:
+
+    SELECT taxorder, taxsuborder, taxgrtgroup, taxsubgrp FROM component WHERE mukey = '459469' AND majcompflag = 'Yes'
+
     SELECT * WHERE areasymbol = 'CA635'
+
     SELECT mup.mupolygonkey, mup.mukey, mup.mupolygongeo FROM mupolygon AS mup WHERE mup.mukey IN (SELECT mukey FROM SDA_Get_Mukey_from_intersection_with_WktWgs84('POINT(-122.449871 37.492633)'))
 
+    SELECT 
+        mu.mupolygonkey,
+        mu.mukey,
+        mu.mupolygongeo,
+        c.compname,
+        c.totcompd_r AS component_percent,
+        c.taxorder,
+        c.taxsuborder,
+        c.taxgrtgroup,
+        c.taxsubgrp,
+        c.taxpartsize,
+        c.taxtempcl,
+        c.taxmoistcl,
+        c.drainagecl,
+        c.hydgrpdcd,
+        c.rootdepth,
+        ch.hzname,
+        ch.hzdept_r,
+        ch.hzdepb_r,
+        ch.sandtotal_r,
+        ch.silttotal_r,
+        ch.claytotal_r,
+        ch.dbthirdbar_r AS bulk_density,
+        ch.ph1to1h2o_r AS ph,
+        ch.ec_r AS salinity,
+        ch.oc_r AS organic_carbon,
+        ch.cec7_r AS cec,
+        ch.sar_r AS sar,
+        pm.pmkind,
+        pm.pmorigin,
+        pmgeom.geomdesc,
+        pmgeom.geomfmod,
+        ec.ecosysname,
+        ec.ecoclasstypename
+    FROM mu
+    JOIN component AS c ON mu.mukey = c.mukey
+    LEFT JOIN chorizon AS ch ON c.cokey = ch.cokey
+    LEFT JOIN copm AS pm ON c.copmkey = pm.copmkey
+    LEFT JOIN copmgrp AS pmgeom ON pm.copmgrpkey = pmgeom.copmgrpkey
+    LEFT JOIN coecoclass AS ec ON c.cokey = ec.cokey
+    WHERE mu.mukey = '459469' 
+    ORDER BY mu.mupolygonkey, c.compname, ch.hzdept_r;
     
     Note: Use with caution. This endpoint allows execution of any SQL query.
     """
@@ -95,10 +141,17 @@ def get_soil_data(
 
     if "Table" not in data or not data["Table"]:
         return {"message": "No map unit polygons found for given coordinates"}
-    
+ 
     polygon = find_polygon_with_coordinate(lat, lon, data["Table"])
+    mukey = polygon[0][1] if polygon else None
+    
+    print("Fetched soil taxonomy for mukey:", mukey)
+    print(f"{get_soil_info(mukey)}")
 
-    return {"data": polygon}
+    return {"data": {
+        "polygon": polygon,
+        "soil_info": get_soil_info(mukey) if mukey else None}
+    }
 
 def find_polygon_with_coordinate(lat: float, lon: float, polygons: list) -> list:
     """
@@ -127,3 +180,48 @@ def find_polygon_with_coordinate(lat: float, lon: float, polygons: list) -> list
 
     return result
 
+def get_soil_info(mukey: str) -> dict:
+    """
+    Given a mukey, fetch soil characteristics from the Soil Data Access API.
+    """
+    query = f"""
+
+    SELECT 
+        c.mukey,
+        c.taxorder as taxonomic_order,
+        ecoclass.ecoclassname as ecological_class,
+        STRING_AGG(species_name, ', ') AS dominant_species
+    FROM component AS c
+
+    -- Join ecological class
+    JOIN coecoclass AS ecoclass ON c.cokey = ecoclass.cokey
+
+    -- Combine all species tables into one union
+    LEFT JOIN (
+        SELECT cokey, plantcomname AS species_name FROM cocanopycover
+        UNION
+        SELECT cokey, plantcomname AS species_name FROM coforprod
+        UNION
+        SELECT cokey, plantcomname AS species_name FROM coeplants
+    ) AS species_union
+    ON c.cokey = species_union.cokey
+
+    WHERE c.mukey = '{mukey}' AND c.majcompflag = 'Yes'
+    GROUP BY c.mukey, c.taxorder, ecoclass.ecoclassname
+    ORDER BY c.mukey;
+
+    """
+    # SELECT taxorder, taxsuborder, taxgrtgroup, taxsubgrp FROM component WHERE mukey = '{mukey}' AND majcompflag = 'Yes'
+
+    payload = {"query": query, "format": "json"}
+    headers = {"Content-Type": "application/x-www-form-urlencoded"}
+
+    try:
+        response = requests.post(SDM_URL, data=payload, headers=headers, timeout=20)
+        response.raise_for_status()
+        data = response.json()
+        rows = data["Table"]
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Upstream service error: {str(e)}")
+
+    return rows
