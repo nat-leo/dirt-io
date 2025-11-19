@@ -74,3 +74,5 @@ venv.bak/
 # secrets
 .env
 node_modules
+!web/lib/
+!web/lib/**

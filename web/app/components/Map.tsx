@@ -1,7 +1,7 @@
 'use client';
 
-import api from '@/lib/api';
 import { useRef, useCallback, useEffect, useState } from 'react';
+import { useApiClient } from './apiClientContext';
 import maplibregl from 'maplibre-gl';
 import {
   Map as DeckGLMap,
@@ -51,7 +51,7 @@ function getViewportBounds(map: MapRef): Viewport {
 }
 
 function Map({
-  getMap = api.getMap, // default to test square for stability; swap to api.getMap for live data
+  getMap, // optional override for stories/tests; defaults to injected client
   initialViewState = {
     longitude: -100,
     latitude: 40,
@@ -61,6 +61,7 @@ function Map({
   const mapRef = useRef<MapRef | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [polygonData, setPolygonData] = useState<MapFeatureCollection | null>(null);
+  const api = useApiClient();
 
   const updatePolygonFromViewport = useCallback(async () => {
     const map = mapRef.current;
@@ -101,9 +102,10 @@ function Map({
 
     console.log('Viewport corners:', {north, south, east, west});
 
-    const geojson = await getMap(bbox.north, bbox.south, bbox.west, bbox.east);
+    const fetchMap = getMap ?? api.getMap;
+    const geojson = await fetchMap(bbox.north, bbox.south, bbox.west, bbox.east);
     setPolygonData(geojson);
-  }, [getMap]);
+  }, [getMap, api]);
 
   const handleMove = useCallback(
     (_evt: ViewStateChangeEvent) => {
