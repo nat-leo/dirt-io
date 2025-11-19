@@ -17,7 +17,9 @@ import 'maplibre-gl/dist/maplibre-gl.css';
 type Coordinate = { lng: number; lat: number };
 type MapFeatureCollection = FeatureCollection<Polygon>;
 
-type GetMapFn = (nw: Coordinate, ne: Coordinate, se: Coordinate, sw: Coordinate) => Coordinate[];
+type GetMapFn =
+  | ((north: number, south: number, west: number, east: number) => MapFeatureCollection)
+  | ((north: number, south: number, west: number, east: number) => Promise<MapFeatureCollection>);
 
 interface MapProps {
   getMap?: GetMapFn;
@@ -28,30 +30,25 @@ interface MapProps {
   };
 }
 
-type ViewportExtent = {
-  nw: Coordinate;
-  ne: Coordinate;
-  se: Coordinate;
-  sw: Coordinate;
+type Viewport = {
+    north: number,
+    south: number,
+    west: number,
+    east: number,
 };
 
-function getViewportCorners(map: MapRef): Coordinate[] {
+function getViewportBounds(map: MapRef): Viewport {
   const bounds = map.getBounds();
-  const nw = bounds.getNorthWest();
-  const ne = bounds.getNorthEast();
-  const se = bounds.getSouthEast();
-  const sw = bounds.getSouthWest();
+  const north = bounds.getNorth();
+  const south = bounds.getSouth();
+  const east = bounds.getEast();
+  const west = bounds.getWest();
 
-  return [
-    { lng: nw.lng, lat: nw.lat },
-    { lng: ne.lng, lat: ne.lat },
-    { lng: se.lng, lat: se.lat },
-    { lng: sw.lng, lat: sw.lat },
-  ];
+  return {north, south, east, west};
 }
 
 function Map({
-  getMap = api.getMap, // default to real API in the app
+  getMap = api.getMap, // default to test square for stability; swap to api.getMap for live data
   initialViewState = {
     longitude: -100,
     latitude: 40,
@@ -62,34 +59,15 @@ function Map({
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [polygonData, setPolygonData] = useState<MapFeatureCollection | null>(null);
 
-  const updatePolygonFromViewport = useCallback(() => {
+  const updatePolygonFromViewport = useCallback(async () => {
     const map = mapRef.current;
     if (!map) return;
 
-    const [nw, ne, se, sw] = getViewportCorners(map);
+    const { north, south, east, west } = getViewportBounds(map);
 
-    console.log('Viewport corners:', { nw, ne, se, sw });
+    console.log('Viewport corners:', {north, south, east, west});
 
-    const coords = getMap(nw, ne, se, sw);
-
-    const ring = [...coords, coords[0]].map(
-      ({ lng, lat }: Coordinate) => [lng, lat] as [number, number],
-    );
-
-    const geojson: MapFeatureCollection = {
-      type: 'FeatureCollection',
-      features: [
-        {
-          type: 'Feature',
-          geometry: {
-            type: 'Polygon',
-            coordinates: [ring],
-          },
-          properties: {},
-        },
-      ],
-    };
-
+    const geojson = await getMap(north, south, east, west);
     setPolygonData(geojson);
   }, [getMap]);
 
@@ -162,4 +140,4 @@ function Map({
 }
 
 export default Map;
-export type { MapProps, GetMapFn, Coordinate, MapFeatureCollection, ViewportExtent };
+export type { MapProps, GetMapFn, Coordinate, MapFeatureCollection, Viewport };
