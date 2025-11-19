@@ -37,6 +37,9 @@ type Viewport = {
     east: number,
 };
 
+const METERS_PER_DEG = 111_300; // approximate
+const TARGET_AREA_M2 = 10_000_000_000; // 10,000 km^2
+
 function getViewportBounds(map: MapRef): Viewport {
   const bounds = map.getBounds();
   const north = bounds.getNorth();
@@ -65,9 +68,40 @@ function Map({
 
     const { north, south, east, west } = getViewportBounds(map);
 
+    // shrink BBOX to half the viewport size (center preserved)
+    const centerLat = (north + south) / 2;
+    const centerLng = (east + west) / 2;
+    const latSpan = (north - south) / 2; // half height
+    const lngSpan = (east - west) / 2; // half width
+    const halfNorth = centerLat + latSpan / 2;
+    const halfSouth = centerLat - latSpan / 2;
+    const halfEast = centerLng + lngSpan / 2;
+    const halfWest = centerLng - lngSpan / 2;
+
+    // Calculate current box area (rough meters)
+    const widthDeg = halfEast - halfWest;
+    const heightDeg = halfNorth - halfSouth;
+    const cosLat = Math.cos((centerLat * Math.PI) / 180);
+    const currentAreaM2 = Math.abs(widthDeg * heightDeg * METERS_PER_DEG * METERS_PER_DEG * cosLat);
+
+    let bbox = { north: halfNorth, south: halfSouth, east: halfEast, west: halfWest };
+
+    // If the half-viewport box exceeds the target area, shrink to an exact target-area square centered on the viewport.
+    if (currentAreaM2 > TARGET_AREA_M2) {
+      const safeCos = Math.max(Math.abs(cosLat), 0.01); // avoid division by tiny cos near poles
+      const sideDeg = Math.sqrt(TARGET_AREA_M2 / (METERS_PER_DEG * METERS_PER_DEG * safeCos));
+      const halfSide = sideDeg / 2;
+      bbox = {
+        north: centerLat + halfSide,
+        south: centerLat - halfSide,
+        east: centerLng + halfSide,
+        west: centerLng - halfSide,
+      };
+    }
+
     console.log('Viewport corners:', {north, south, east, west});
 
-    const geojson = await getMap(north, south, east, west);
+    const geojson = await getMap(bbox.north, bbox.south, bbox.west, bbox.east);
     setPolygonData(geojson);
   }, [getMap]);
 
