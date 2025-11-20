@@ -10,8 +10,35 @@ command_exists() {
   command -v "$1" >/dev/null 2>&1
 }
 
+# Load nvm if available but not already on PATH
+if ! command_exists nvm; then
+  export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
+  if [ -s "$NVM_DIR/nvm.sh" ]; then
+    . "$NVM_DIR/nvm.sh"
+  fi
+fi
+
+# Prefer latest Node.js 22.x via nvm; install if missing.
+if command_exists nvm; then
+  LATEST_22=$(nvm ls 22 --no-colors 2>/dev/null | grep -oE 'v22[0-9.]+' | sort -V | tail -n1)
+  if [ -z "$LATEST_22" ]; then
+    echo "Node.js 22 not installed in nvm; installing latest 22.x..."
+    nvm install 22 >/dev/null 2>&1
+    LATEST_22=$(nvm ls 22 --no-colors 2>/dev/null | grep -oE 'v22[0-9.]+' | sort -V | tail -n1)
+  fi
+  if [ -n "$LATEST_22" ]; then
+    echo "Using Node.js $LATEST_22 via nvm..."
+    nvm use "$LATEST_22" >/dev/null 2>&1
+  else
+    echo "Could not install Node.js 22; using current node $(node -v)"
+  fi
+else
+  echo "nvm not found; using system node $(node -v)"
+fi
+
 # Setup backend environment
-echo "\nSetting up backend environment..."
+echo
+echo "Setting up backend environment..."
 
 if [ ! -d "backend/venv" ]; then
   echo "Creating Python virtual environment in backend/venv ..."
@@ -36,11 +63,12 @@ else
 fi
 
 # Setup frontend environment
-echo "\nSetting up frontend environment..."
+echo
+echo "Setting up web environment..."
 
-if [ ! -d "frontend/node_modules" ] || [ ! -f "frontend/node_modules/.bin/react-scripts" ]; then
-  echo "Installing Node.js packages for frontend..."
-  cd frontend
+if [ ! -d "web/node_modules" ] || [ ! -f "web/node_modules/.bin/react-scripts" ]; then
+  echo "Installing Node.js packages for web..."
+  cd web
   if ! command_exists npm; then
     echo "npm is not installed. Please install Node.js and npm."
     exit 1
@@ -48,18 +76,13 @@ if [ ! -d "frontend/node_modules" ] || [ ! -f "frontend/node_modules/.bin/react-
   npm install
   cd ..
 else
-  echo "Frontend dependencies already installed."
-fi
-
-# Create .env file for React app if it doesn't exist.
-if [ ! -f "frontend/.env" ]; then
-  echo "REACT_APP_GOOGLE_MAPS_API_KEY=" > frontend/.env
-  echo "Created .env file in frontend with empty REACT_APP_GOOGLE_MAPS_API_KEY."
+  echo "Web dependencies already installed."
 fi
 
 # Function to clean up background processes upon exit
 function cleanup() {
-  echo "\nShutting down development environment..."
+  echo
+  echo "Shutting down development environment..."
   if [ -n "$BACKEND_PID" ]; then
     kill $BACKEND_PID 2>/dev/null || true
   fi
@@ -72,7 +95,9 @@ function cleanup() {
 trap cleanup SIGINT SIGTERM
 
 # Start the backend server
-echo "\nStarting FastAPI backend..."
+echo
+echo "Starting FastAPI backend..."
+export FASTAPI_BASE_URL=http://localhost:8000
 cd backend
 source venv/bin/activate
 uvicorn soil:app --reload &
@@ -80,14 +105,27 @@ BACKEND_PID=$!
 cd ..
 
 # Start the frontend server
-echo "\nStarting React frontend..."
-cd frontend
-npm start &
+echo
+echo "Starting React frontend..."
+export NEXT_PUBLIC_API_BASE_URL=$FASTAPI_BASE_URL
+cd web
+NEXT_DISABLE_TURBOPACK=1 npm run dev &
+FRONTEND_PID=$!
+cd ..
+
+# Start the Storybook server
+# STORYBOOK SERVER NEEDS NODE VERSION 20 OR 22! (November 17, 2025)
+echo
+echo "Starting Storybook..."
+cd web
+rm -rf node_modules/.cache/storybook
+npm run storybook &
 FRONTEND_PID=$!
 cd ..
 
 # Let the child processes run until interrupted
-echo "\nDevelopment environment is running. Press Ctrl+C to stop."
+echo
+echo "Development environment is running. Press Ctrl+C to stop."
 wait
 
 cleanup

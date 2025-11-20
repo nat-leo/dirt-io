@@ -275,7 +275,7 @@ async def get_map(BBOX: str = Query(..., description="Bounding box as 'minLon,mi
         raise HTTPException(
             status_code=400,
             detail="BBOX values must be valid floats",
-        )e
+        )
 
     # Normalize + clamp (in case the user sends corners reversed)
     min_x = min(min_lon, max_lon)
