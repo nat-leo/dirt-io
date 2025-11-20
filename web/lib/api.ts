@@ -11,42 +11,78 @@ if (!BASE_URL) {
   );
 }
 
-function parseWfsXmlToFeatureCollection(xml: string): FeatureCollection<Polygon> {
+export async function parseWfsXmlToFeatureCollection(
+  xml: string,
+): Promise<FeatureCollection<Polygon>> {
   const coordRegex = /<gml:coordinates[^>]*>([^<]+)<\/gml:coordinates>/gi;
-  let match;
-  const features = [];
+  const surveyAreaRegex =
+    /<ms:surveyareapoly[^>]*fid="surveyareapoly\.([A-Z]{2}[0-9]{3})"[^>]*>([\s\S]*?)<\/ms:surveyareapoly>/gi;
+  const features: FeatureCollection<Polygon>['features'] = [];
+  const discoveredSymbols = new Set<string>();
 
-  while ((match = coordRegex.exec(xml)) !== null) {
-    const raw = match[1].trim();
-    const points = raw
-      .split(/\s+/)
-      .map((pair) => pair.split(/[, ]+/).map(parseFloat))
-      .filter((nums) => nums.length === 2 && nums.every((n) => !Number.isNaN(n)))
-      .map(([lat, lng]) => [lng, lat] as [number, number]); // swap to [lng, lat]
+  let areaMatch;
+  while ((areaMatch = surveyAreaRegex.exec(xml)) !== null) {
+    const areaSymbol = areaMatch[1];
+    if (areaSymbol) {
+      discoveredSymbols.add(areaSymbol);
+    }
 
-    if (points.length < 3) continue;
+    const areaContent = areaMatch[2];
+    coordRegex.lastIndex = 0;
+    let coordMatch;
+    while ((coordMatch = coordRegex.exec(areaContent)) !== null) {
+      const raw = coordMatch[1].trim();
+      const points = raw
+        .split(/\s+/)
+        .map((pair) => pair.split(/[, ]+/).map(parseFloat))
+        .filter((nums) => nums.length === 2 && nums.every((n) => !Number.isNaN(n)))
+        .map(([lat, lng]) => [lng, lat] as [number, number]); // swap to [lng, lat]
 
-    const closed =
-      points.length > 0 &&
-      (points[0][0] !== points[points.length - 1][0] ||
-        points[0][1] !== points[points.length - 1][1])
-        ? [...points, points[0]]
-        : points;
+      if (points.length < 3) continue;
 
-    features.push({
-      type: 'Feature' as const,
-      geometry: {
-        type: 'Polygon' as const,
-        coordinates: [closed],
-      },
-      properties: {},
-    });
+      const closed =
+        points.length > 0 &&
+        (points[0][0] !== points[points.length - 1][0] ||
+          points[0][1] !== points[points.length - 1][1])
+          ? [...points, points[0]]
+          : points;
+
+      features.push({
+        type: 'Feature' as const,
+        geometry: {
+          type: 'Polygon' as const,
+          coordinates: [closed],
+        },
+        properties: areaSymbol ? { areaSymbol } : {},
+      });
+    }
+  }
+
+  if (discoveredSymbols.size > 0) {
+    await persistAreaSymbols(Array.from(discoveredSymbols));
   }
 
   return {
     type: 'FeatureCollection',
     features,
   };
+}
+
+async function persistAreaSymbols(symbols: string[]): Promise<void> {
+  if (!symbols.length || typeof window !== 'undefined') {
+    return;
+  }
+
+  try {
+    const { updateAreaSymbolsFile } = await import('./areaSymbols.server');
+    await updateAreaSymbolsFile(symbols);
+  } catch (error) {
+    // eslint-disable-next-line no-console
+    console.warn(
+      '[parseWfsXmlToFeatureCollection] failed to persist area symbols',
+      error,
+    );
+  }
 }
 
 function createApiClient(baseUrl?: string) {
@@ -118,7 +154,7 @@ function createApiClient(baseUrl?: string) {
       });
       // eslint-disable-next-line no-console
       console.log('[api.getMap] url:', url, 'responseLength:', text.length);
-      const featureCollection = parseWfsXmlToFeatureCollection(text);
+      const featureCollection = await parseWfsXmlToFeatureCollection(text);
       // eslint-disable-next-line no-console
       console.log(
         '[api.getMap] parsed polygons:',
@@ -156,6 +192,7 @@ function createApiClient(baseUrl?: string) {
         ],
       };
     },
+
   };
 }
 
