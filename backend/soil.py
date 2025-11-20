@@ -1,21 +1,44 @@
-from fastapi import FastAPI, Query, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
+
+from __future__ import annotations
+
 import requests
 import geopandas as gpd
 import shapely
 
+from typing import Any, Dict, List, Set
+import json
+import math
+import os
+import re
+from pathlib import Path
+
+import httpx
+from fastapi import FastAPI, HTTPException, Query
+from fastapi.middleware.cors import CORSMiddleware
+
+# --- FastAPI App --------------------------------------------------------------
+
 app = FastAPI(title="Soil Data Access API", version="1.0.0")
 
-# Allow all origins (for local dev)
+# --- URLs ---------------------------------------------------------------------
+
+AREA_SYMBOLS_PATH = os.getenv("AREA_SYMBOLS_PATH", "area-symbols.json")
+FRONTEND_ORIGIN = os.getenv("FRONTEND_ORIGIN", "http://localhost:3000")
+
+WFS_BASE_URL = "https://sdmdataaccess.sc.egov.usda.gov/Spatial/SDMWM.wfs"
+SDM_URL = "https://sdmdataaccess.nrcs.usda.gov/Tabular/post.rest"
+
+# --- Config  ------------------------------------------------------------------
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],  # frontend origin
+    allow_origins=[FRONTEND_ORIGIN, "http://localhost:3000"],  # frontend origin
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-SDM_URL = "https://sdmdataaccess.nrcs.usda.gov/Tabular/post.rest"
+# --- API Endpoints ------------------------------------------------------------
 
 @app.get("/soil/sql", summary="Execute Arbitrary SQL Query on Soil Data Access API")
 def execute_soil_sql(
@@ -225,3 +248,196 @@ def get_soil_info(mukey: str) -> dict:
         raise HTTPException(status_code=502, detail=f"Upstream service error: {str(e)}")
 
     return rows
+
+@app.get("/map")
+async def get_map(BBOX: str = Query(..., description="Bounding box as 'minLon,minLat,maxLon,maxLat' (like NRCS WFS)",),) -> Dict[str, Any]:
+    """
+    Return FeatureCollection<Polygon> for a bbox via SDMWM.wfs.
+
+    BBOX format matches NRCS / WFS, e.g.:
+      BBOX=-124.5,32.0,-113.0,42.0
+    """
+
+    # Parse BBOX string
+    parts = [p.strip() for p in BBOX.split(",")]
+    if len(parts) != 4:
+        raise HTTPException(
+            status_code=400,
+            detail="BBOX must have 4 comma-separated numbers: minLon,minLat,maxLon,maxLat",
+        )
+
+    try:
+        min_lon = float(parts[0])
+        min_lat = float(parts[1])
+        max_lon = float(parts[2])
+        max_lat = float(parts[3])
+    except ValueError:
+        raise HTTPException(
+            status_code=400,
+            detail="BBOX values must be valid floats",
+        )e
+
+    # Normalize + clamp (in case the user sends corners reversed)
+    min_x = min(min_lon, max_lon)
+    max_x = max(min_lon, max_lon)
+    min_y = min(min_lat, max_lat)
+    max_y = max(min_lat, max_lat)
+
+    n_west = clamp_decimals(min_x)
+    n_east = clamp_decimals(max_x)
+    n_south = clamp_decimals(min_y)
+    n_north = clamp_decimals(max_y)
+
+    bbox_norm = f"{n_west},{n_south},{n_east},{n_north}"
+
+    params = {
+        "SERVICE": "wfs",
+        "VERSION": "1.1.0",
+        "REQUEST": "GetFeature",
+        "TYPENAME": "surveyareapoly",
+        "SRSNAME": "EPSG:4326",
+        "BBOX": bbox_norm,
+    }
+
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        try:
+            resp = await client.get(WFS_BASE_URL, params=params)
+        except httpx.HTTPError as e:
+            raise HTTPException(status_code=502, detail=f"WFS request failed: {e!s}")
+
+    if resp.status_code != 200:
+        raise HTTPException(
+            status_code=resp.status_code,
+            detail=f"WFS responded with {resp.status_code}",
+        )
+
+    xml = resp.text
+    feature_collection = parse_wfs_xml_to_feature_collection(xml)
+
+    print(
+        "[/map]",
+        "BBOX=",
+        BBOX,
+        "normalized=",
+        bbox_norm,
+        "features=",
+        len(feature_collection["features"]),
+    )
+
+    return feature_collection
+
+# --- Helpers --------------------------------------------------------------------
+
+def clamp_decimals(n: float, places: int = 12) -> float:
+    """ NRCS Web Services require that the coordinates be
+    12 decimal points or less.
+    """
+    return float(f"{n:.{places}f}")
+
+def persist_area_symbols(symbols: Set[str]) -> None:
+    """Keep a JSON file of unique area symbols grouped by State.
+
+    Example file contents:
+    {
+      "CA": ["CA011", "CA689"],
+      "AZ": ["AZ001", "AZ002"]
+    }
+
+    The goal is to eventually get all the area symbols and 
+    mass download the data to storage so we can have parcel-level
+    soil data - going way past county level we get from NRCS web 
+    services.
+    """
+    if not symbols:
+        return
+
+    path = Path(AREA_SYMBOLS_PATH)
+    existing: Dict[str, List[str]] = {}
+
+    if path.exists():
+        try:
+            existing = json.loads(path.read_text())
+        except json.JSONDecodeError:
+            existing = {}
+
+    for symbol in symbols:
+        if len(symbol) < 2:
+            continue
+        key = symbol[:2]
+        bucket = existing.setdefault(key, [])
+        if symbol not in bucket:
+            bucket.append(symbol)
+            bucket.sort()
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(existing, indent=2))
+
+# --- WFS XML Parsing -----------------------------------------------------------
+coord_regex = re.compile(
+    r'<gml:coordinates[^>]*>([^<]+)</gml:coordinates>', re.IGNORECASE
+)
+
+survey_area_regex = re.compile(
+    r'<ms:surveyareapoly[^>]*fid="surveyareapoly\.([A-Z]{2}[0-9]{3})"[^>]*>([\s\S]*?)</ms:surveyareapoly>',
+    re.IGNORECASE,
+)
+
+def parse_wfs_xml_to_feature_collection(xml: str) -> Dict[str, Any]:
+    """Parse SDMWM.wfs XML into GeoJSON FeatureCollection<Polygon>."""
+
+    features: List[Dict[str, Any]] = []
+    discovered_symbols: Set[str] = set()
+
+    for area_match in survey_area_regex.finditer(xml):
+        area_symbol = area_match.group(1)
+        area_content = area_match.group(2)
+
+        if area_symbol:
+            discovered_symbols.add(area_symbol)
+
+        for coord_match in coord_regex.finditer(area_content):
+            raw = coord_match.group(1).strip()
+
+            points: List[List[float]] = []
+            for pair in re.split(r"\s+", raw):
+                nums = [p for p in re.split(r"[, ]+", pair) if p]
+                if len(nums) != 2:
+                    continue
+                try:
+                    a = float(nums[0])
+                    b = float(nums[1])
+                except ValueError:
+                    continue
+                if math.isnan(a) or math.isnan(b):
+                    continue
+
+                # Mirror your TS logic:
+                #   .map(([lat, lng]) => [lng, lat])
+                lat, lng = a, b
+                points.append([lng, lat])
+
+            if len(points) < 3:
+                continue
+
+            # Close polygon if not closed
+            if points[0] != points[-1]:
+                points.append(points[0])
+
+            features.append(
+                {
+                    "type": "Feature",
+                    "geometry": {
+                        "type": "Polygon",
+                        "coordinates": [points],
+                    },
+                    "properties": {"areaSymbol": area_symbol} if area_symbol else {},
+                }
+            )
+
+    if discovered_symbols:
+        persist_area_symbols(discovered_symbols)
+
+    return {
+        "type": "FeatureCollection",
+        "features": features,
+    }
