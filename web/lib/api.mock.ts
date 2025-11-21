@@ -24,6 +24,33 @@ const square: FeatureCollection<Polygon> = {
   ],
 };
 
+const createBBoxFeatureCollection = (
+  north: number,
+  south: number,
+  west: number,
+  east: number,
+): FeatureCollection<Polygon> => ({
+  type: 'FeatureCollection',
+  features: [
+    {
+      type: 'Feature',
+      geometry: {
+        type: 'Polygon',
+        coordinates: [
+          [
+            [west, north],
+            [east, north],
+            [east, south],
+            [west, south],
+            [west, north],
+          ],
+        ],
+      },
+      properties: { id: 'mock-square' },
+    },
+  ],
+});
+
 export const mockApiClient: ApiClient = {
   get: async () => {
     throw new Error('mockApiClient.get not implemented');
@@ -47,7 +74,7 @@ export const mockApiClient: ApiClient = {
     east: number,
   ) {
     console.log('[mockApiClient.getMap]', { north, south, west, east });
-    return square;
+    return createBBoxFeatureCollection(north, south, west, east);
   },
   getSquare(
     north: number,

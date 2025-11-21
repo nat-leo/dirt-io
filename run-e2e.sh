@@ -10,6 +10,8 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WEB_DIR="$ROOT_DIR/web"
 HOST="${HOST:-127.0.0.1}"
 PORT="${PORT:-3000}"
+BACKEND_PORT="${BACKEND_PORT:-8000}" 
+
 
 command_exists() {
   command -v "$1" >/dev/null 2>&1
@@ -33,7 +35,11 @@ if [ ! -d playwright ]; then
 fi
 
 echo "Starting Next.js dev server on http://${HOST}:${PORT} ..."
-NEXT_DISABLE_TURBOPACK=1 npm run dev -- --hostname "$HOST" --port "$PORT" >/tmp/next-dev.log 2>&1 &
+NEXT_DISABLE_TURBOPACK=1 \
+FASTAPI_BASE_URL="http://${HOST}:${BACKEND_PORT}" \
+NEXT_PUBLIC_API_BASE_URL="http://${HOST}:${BACKEND_PORT}" \
+NEXT_PUBLIC_API_MODE=mock \
+npm run dev -- --hostname "$HOST" --port "$PORT" >/tmp/next-dev.log 2>&1 &
 DEV_PID=$!
 
 cleanup() {
