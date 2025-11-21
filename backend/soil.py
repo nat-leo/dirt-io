@@ -1,18 +1,16 @@
 
 from __future__ import annotations
 
-import requests
-import geopandas as gpd
-import shapely
-
-from typing import Any, Dict, List, Set
 import json
 import math
 import os
 import re
 from pathlib import Path
+from typing import Any, Dict, List, Set
 
+import geopandas as gpd
 import httpx
+import shapely
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -27,6 +25,18 @@ FRONTEND_ORIGIN = os.getenv("FRONTEND_ORIGIN", "http://localhost:3000")
 
 WFS_BASE_URL = "https://sdmdataaccess.sc.egov.usda.gov/Spatial/SDMWM.wfs"
 SDM_URL = "https://sdmdataaccess.nrcs.usda.gov/Tabular/post.rest"
+SDM_HEADERS = {"Content-Type": "application/x-www-form-urlencoded"}
+SDM_TIMEOUT = 20.0
+
+
+def post_to_sdm(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """Perform a POST request against the SDM endpoint with shared headers and timeout."""
+    try:
+        response = httpx.post(SDM_URL, data=payload, headers=SDM_HEADERS, timeout=SDM_TIMEOUT)
+        response.raise_for_status()
+        return response.json()
+    except httpx.HTTPError as exc:
+        raise HTTPException(status_code=502, detail=f"Upstream service error: {exc!s}")
 
 # --- Config  ------------------------------------------------------------------
 
@@ -102,14 +112,7 @@ def execute_soil_sql(
     """
 
     payload = {"query": query, "format": "json"}
-    headers = {"Content-Type": "application/x-www-form-urlencoded"}
-
-    try:
-        response = requests.post(SDM_URL, data=payload, headers=headers, timeout=20)
-        response.raise_for_status()
-        data = response.json()
-    except Exception as e:
-        raise HTTPException(status_code=502, detail=f"Upstream service error: {str(e)}")
+    data = post_to_sdm(payload)
 
     return data
 
@@ -153,14 +156,7 @@ def get_soil_data(
     """
 
     payload = {"query": query, "format": "json"}
-    headers = {"Content-Type": "application/x-www-form-urlencoded"}
-
-    try:
-        response = requests.post(SDM_URL, data=payload, headers=headers, timeout=20)
-        response.raise_for_status()
-        data = response.json()
-    except Exception as e:
-        raise HTTPException(status_code=502, detail=f"Upstream service error: {str(e)}")
+    data = post_to_sdm(payload)
 
     if "Table" not in data or not data["Table"]:
         return {"message": "No map unit polygons found for given coordinates"}
@@ -237,16 +233,8 @@ def get_soil_info(mukey: str) -> dict:
     # SELECT taxorder, taxsuborder, taxgrtgroup, taxsubgrp FROM component WHERE mukey = '{mukey}' AND majcompflag = 'Yes'
 
     payload = {"query": query, "format": "json"}
-    headers = {"Content-Type": "application/x-www-form-urlencoded"}
-
-    try:
-        response = requests.post(SDM_URL, data=payload, headers=headers, timeout=20)
-        response.raise_for_status()
-        data = response.json()
-        rows = data["Table"]
-    except Exception as e:
-        raise HTTPException(status_code=502, detail=f"Upstream service error: {str(e)}")
-
+    data = post_to_sdm(payload)
+    rows = data["Table"]
     return rows
 
 @app.get("/map")
