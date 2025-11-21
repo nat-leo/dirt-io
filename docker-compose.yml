@@ -1,0 +1,28 @@
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: fastapi-backend
+    ports:
+      - "8000:8000"
+    volumes:
+      - "./backend/area-symbols.json:/app/area-symbols.json"
+
+  frontend:
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+      args:
+        FASTAPI_BASE_URL: "http://backend:8000"
+        NEXT_PUBLIC_API_BASE_URL: "http://localhost:8000"
+    container_name: next-frontend
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    environment:
+      # For code running on the *server* inside the Next.js container
+      FASTAPI_BASE_URL: "http://backend:8000"
+      # For code running in the *browser* (NEXT_PUBLIC_ gets baked into bundle)
+      NEXT_PUBLIC_API_BASE_URL: "http://localhost:8000"
