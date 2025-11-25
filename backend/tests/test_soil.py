@@ -7,7 +7,6 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 import soil
 
 
-
 client = TestClient(soil.app)
 
 # you need to run `pytest -s` to see this output. It will always succeed.

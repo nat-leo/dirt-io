@@ -13,9 +13,29 @@ The wrapper ensures the project root is on `sys.path`, so you can keep running `
 | `-b`/`--bucket <name>` | Override the target bucket (defaults to `GCS_BUCKET` env var or `soil-raw`). |
 | `-c`/`--concurrency <n>` | Number of concurrent downloads when you use `--manifest` (default: `50`). |
 
+### Generate area symbol download URLs
+
+Use `pipelines.area_symbols_to_urls` when you need a TSV of every Web Soil Survey ZIP URL corresponding to the current `area-symbols.json`. It queries `sacatalog` in batches, converts each `saverest` date to `YYYY-MM-DD`, builds the `wss_SSA_{area_symbol}...[{date}].zip` URL, and writes the results to a tab-separated file.
+
+```bash
+cd backend
+python -m pipelines.area_symbols_to_urls --output area-symbol-urls.tsv
+```
+
+The script logs warnings for any symbols with missing dates and skips them. Pass `--limit 10` during development to only resolve the first ten area symbols.
+
 When you need to test just one area symbol before a mass ingest (e.g., `--area-symbol CA805`), the utility queries `sacatalog` with `SELECT areasymbol, saverest FROM sacatalog WHERE areasymbol IN (...)`, converts the returned date to `YYYY-MM-DD`, constructs a URL such as `https://websoilsurvey.sc.egov.usda.gov/DSD/Download/Cache/SSA/wss_SSA_CA805_soildb_US_2003_[2025-09-09].zip`, logs it, and uploads the unzipped contents.
 
 Set `GCS_BUCKET=soil-parcels-of` (or pass `--bucket soil-parcels-of`) to stage those smoke-test downloads alongside your production data.
+
+### Example area-symbol run
+
+```bash
+cd backend
+GCS_BUCKET=soil-parcels-of python -m pipelines.nrcs_to_google_cloud_storage --area-symbol CA805
+```
+
+The tool logs the zip URL it downloads (`INFO` level), and you’ll see `tqdm` progress bars for the download and unzipping/upload stages so you can gauge how long the full workflow takes. Make sure your gcloud credentials are set (e.g., `gcloud auth application-default login` or `GOOGLE_APPLICATION_CREDENTIALS=/path/to/key.json`) so the upload succeeds.
 
 ## Skippable integration check
 
