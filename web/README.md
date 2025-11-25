@@ -1,36 +1,44 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Web client
 
-## Getting Started
+This Next.js 16 app renders a Deck.GL/MapLibre map that overlays NRCS USDA soil polygons retrieved from the backend. The map ships with an API client context that lets you swap between the live FastAPI service and the mock client used for Storybook, Playwright, and offline demos.
 
-First, run the development server:
+## Local setup
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+1. `cd web`
+2. Install dependencies with `npm install`.
+3. Create or adapt any `.env` values using the environment variables described below before starting the dev server.
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Environment variables
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+- `FASTAPI_BASE_URL` / `NEXT_PUBLIC_API_BASE_URL`: base URL for backend requests (defaults to relative URLs within the Next.js app).
+- `NEXT_PUBLIC_API_MODE`: set to `mock` to force `mockApiClient`; otherwise `realApiClient` hits the configured backend service.
+- `PLAYWRIGHT_BASE_URL`: point Playwright at an existing deployment instead of launching the bundled dev server (`NEXT_PUBLIC_API_MODE=mock pnpm dev`).
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Scripts (`npm run <script>`)
 
-## Learn More
+- `dev`: `next dev` – run the app locally with fast refresh.
+- `build`: `next build` – compile the production bundle and validate routes.
+- `start`: `next start` – serve the optimized build.
+- `lint`: `eslint .` – lint the app and Storybook stories.
+- `storybook`: launch Storybook on port 6006 for isolated component work (the `Map` story shows viewport-based polygon queries).
+- `build-storybook`: prebuild Storybook for hosting or sharing.
 
-To learn more about Next.js, take a look at the following resources:
+Additional tooling:
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+- `npx playwright test`: run the Playwright suites under `tests/` against `NEXT_PUBLIC_API_MODE=mock pnpm dev` (or against `PLAYWRIGHT_BASE_URL` if set).
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## App structure
 
-## Deploy on Vercel
+- `app/page.tsx` composes the centered starter layout and renders `<Map />`.
+- `app/components/Map.tsx` relies on `react-map-gl/maplibre` and MapLibre basemaps, throttles viewport events, caps the request area to ~10,000 km², and paints the GeoJSON via `Source`/`Layer`.
+- `app/components/apiClientContext.tsx` swaps between `realApiClient` (`lib/api.ts`) and `mockApiClient` (`lib/api.mock.ts`) depending on `NEXT_PUBLIC_API_MODE`.
+- Shared helpers/types live in `lib/definitions.ts`, `lib/utils.ts`, and `lib/areaSymbols.server.ts` (the latter proxies backend area symbols during server renders).
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Testing and verification
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+1. Run `npm run dev` (set `NEXT_PUBLIC_API_MODE=mock` for offline prototypes).
+2. Execute `npm run lint`.
+3. Run `npx playwright test` (traces are recorded on first retries per `playwright.config.ts`).
+4. Use `npm run storybook` to preview the `Map` story with mock data.
+
+When you have a backend ready, set `NEXT_PUBLIC_API_MODE=real` and configure `FASTAPI_BASE_URL` to surface live `/map` data in the running app.
