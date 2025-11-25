@@ -65,9 +65,10 @@ def test_download_area_symbol_package(monkeypatch, caplog):
         data: bytes,
         *,
         bucket_name: str | None = None,
+        path_prefix: str | None = None,
         show_progress: bool = False,
     ) -> None:
-        uploads.append((data, bucket_name, show_progress))
+        uploads.append((data, bucket_name, path_prefix, show_progress))
 
     monkeypatch.setattr(nrcs_to_google_cloud_storage, "fetch_sacatalog_records", fake_records)
     monkeypatch.setattr(
@@ -86,6 +87,8 @@ def test_download_area_symbol_package(monkeypatch, caplog):
     )
 
     assert uploads, "Expected the zip bytes to be handed off for upload"
-    assert uploads[0][2] is True
+    assert uploads[0][1] == "soil-parcels-of"
+    assert uploads[0][2] == "CA805"
+    assert uploads[0][3] is True
     assert urls and "2025-09-09" in urls[0]
     assert "2025-09-09" in caplog.text
