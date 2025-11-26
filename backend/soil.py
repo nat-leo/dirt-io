@@ -23,6 +23,7 @@ app = FastAPI(title="Soil Data Access API", version="1.0.0")
 AREA_SYMBOLS_PATH = os.getenv("AREA_SYMBOLS_PATH", "area-symbols.json")
 FRONTEND_ORIGIN = os.getenv("FRONTEND_ORIGIN", "http://localhost:3000")
 
+AREA_SYMBOLS_QUERY = "SELECT DISTINCT areasymbol FROM legend ORDER BY areasymbol;"
 WFS_BASE_URL = "https://sdmdataaccess.sc.egov.usda.gov/Spatial/SDMWM.wfs"
 SDM_URL = "https://sdmdataaccess.nrcs.usda.gov/Tabular/post.rest"
 SDM_HEADERS = {"Content-Type": "application/x-www-form-urlencoded"}
@@ -37,6 +38,28 @@ def post_to_sdm(payload: Dict[str, Any]) -> Dict[str, Any]:
         return response.json()
     except httpx.HTTPError as exc:
         raise HTTPException(status_code=502, detail=f"Upstream service error: {exc!s}")
+
+
+def get_area_symbols() -> list[str]:
+    """
+    Fetch every area symbol defined in the USDA legend table, ordered ascending.
+    """
+    payload = {"query": AREA_SYMBOLS_QUERY, "format": "json"}
+    data = post_to_sdm(payload)
+    table = data.get("Table", [])
+
+    if not isinstance(table, list):
+        raise ValueError("Expected 'Table' to be a list")
+
+    symbols: list[str] = []
+    for row in table:
+        if not isinstance(row, list) or not row:
+            continue
+        symbol = row[0]
+        if isinstance(symbol, str):
+            symbols.append(symbol)
+
+    return symbols
 
 # --- Config  ------------------------------------------------------------------
 

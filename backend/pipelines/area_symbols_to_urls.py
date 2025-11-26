@@ -6,9 +6,8 @@ import logging
 from pathlib import Path
 from typing import Iterable, Iterator, Sequence
 
-from area_symbol_utils import read_area_symbol_values
-
 from pipelines import nrcs_to_google_cloud_storage
+from soil import get_area_symbols
 
 logger = logging.getLogger(__name__)
 
@@ -61,7 +60,7 @@ def main(
     output: Path,
     limit: int | None = None,
 ) -> None:
-    symbols = read_area_symbol_values()
+    symbols = get_area_symbols()
     if limit:
         symbols = symbols[:limit]
 

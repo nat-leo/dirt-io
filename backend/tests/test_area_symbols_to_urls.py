@@ -19,7 +19,7 @@ def test_build_urls_respects_missing_dates(monkeypatch, caplog, tmp_path):
     caplog.set_level(logging.WARNING)
 
     symbols = ["CA803", "CA805", "CA999"]
-    monkeypatch.setattr(area_symbols_to_urls, "read_area_symbol_values", lambda: symbols)
+    monkeypatch.setattr(area_symbols_to_urls, "get_area_symbols", lambda: symbols)
 
     def fake_fetch(symbols_to_fetch):
         assert symbols_to_fetch == symbols
@@ -48,7 +48,7 @@ def test_build_urls_respects_missing_dates(monkeypatch, caplog, tmp_path):
 
 def test_main_respects_limit(monkeypatch, tmp_path):
     symbols = ["CA803", "CA805", "CA999"]
-    monkeypatch.setattr(area_symbols_to_urls, "read_area_symbol_values", lambda: symbols)
+    monkeypatch.setattr(area_symbols_to_urls, "get_area_symbols", lambda: symbols)
     outputs = []
 
     def fake_fetch(symbols_to_fetch):

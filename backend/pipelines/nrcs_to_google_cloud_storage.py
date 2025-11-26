@@ -6,9 +6,11 @@ import io
 import logging
 import os
 import sys
+import time
 import zipfile
 from datetime import datetime
 from pathlib import Path
+import re
 from typing import Dict, Iterable, Mapping, Sequence
 
 import httpx
@@ -24,10 +26,10 @@ SDM_HEADERS = {"Content-Type": "application/x-www-form-urlencoded"}
 SDM_TIMEOUT = 20.0
 ZIP_URL_TEMPLATE = (
     "https://websoilsurvey.sc.egov.usda.gov/DSD/Download/Cache/SSA/"
-    "wss_SSA_{area_symbol}_soildb_US_2003_[{date}].zip"
+    "wss_SSA_{area_symbol}_soildb_{region}_2003_[{date}].zip"
 )
-CONCURRENCY = 50
-DEFAULT_GCS_BUCKET = os.getenv("GCS_BUCKET", "soil-raw")
+CONCURRENCY = 2
+DEFAULT_GCS_BUCKET = os.getenv("GCS_BUCKET", "soil-parcels-of")
 DEFAULT_GCS_PREFIX = None
 _storage_buckets: Dict[str, storage.bucket.Bucket] = {}
 
@@ -82,26 +84,43 @@ def upload_archive(
     *,
     bucket_name: str | None = None,
     path_prefix: str | None = None,
-    show_progress: bool = False,
 ) -> None:
     """
     Extract each file from an archive and upload it to GCS.
     """
     with zipfile.ZipFile(io.BytesIO(zip_bytes)) as archive:
         members = archive.namelist()
-        progress = tqdm(total=len(members), desc="Unzipping/Uploading", unit="file", leave=False) if show_progress else None
+        progress = tqdm(total=len(members), desc="Unzipping/Uploading", unit="file", leave=False)
         for name in members:
             with archive.open(name) as fileobj:
                 data = fileobj.read()
 
             prefix = path_prefix or None
             gcs_path = f"{prefix}/{name}" if prefix else name
-            upload_to_gcs(gcs_path, data, bucket_name=bucket_name, path_prefix=gcs_path)
+            upload_to_gcs(gcs_path, data, bucket_name=bucket_name)
             if progress:
                 progress.update(1)
 
         if progress:
             progress.close()
+
+
+def _region_swap_url(url: str) -> str | None:
+    """
+    Replace the `_soildb_<region>_` segment with the area symbol's prefix when possible.
+    """
+    match = re.search(r"wss_SSA_([A-Z0-9]+)_soildb_([A-Z]{2})_2003_", url, re.IGNORECASE)
+    if not match:
+        return None
+
+    area_symbol = match.group(1).upper()
+    region = match.group(2).upper()
+    prefix = area_symbol[:2].upper()
+    if prefix == region:
+        return None
+
+    start, end = match.span(2)
+    return url[:start] + prefix + url[end:]
 
 
 async def process_url(
@@ -112,7 +131,33 @@ async def process_url(
     bucket_name: str | None = None,
 ) -> None:
     async with semaphore:
-        zip_bytes = await fetch_zip(client, url)
+        logger.info("Downloading manifest URL %s", url)
+        try:
+            zip_bytes = await fetch_zip_with_progress(
+                client,
+                url,
+                desc=f"Downloading {url}",
+            )
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code == 400:
+                alt_url = _region_swap_url(url)
+                if alt_url:
+                    logger.info("Retrying with alternate URL %s", alt_url)
+                    try:
+                        zip_bytes = await fetch_zip_with_progress(
+                            client,
+                            alt_url,
+                            desc=f"Downloading {alt_url}",
+                        )
+                    except httpx.HTTPStatusError as second_exc:
+                        logger.warning("Skipping %s (HTTP %s)", alt_url, second_exc.response.status_code)
+                        return
+                else:
+                    logger.warning("Skipping %s (HTTP 400)", url)
+                    return
+            else:
+                logger.warning("Skipping %s (HTTP %s)", url, exc.response.status_code)
+                return
 
     upload_archive(zip_bytes, bucket_name=bucket_name)
 
@@ -136,6 +181,9 @@ async def main(
     if not urls:
         return
 
+    start_time = time.perf_counter()
+    logger.info("Running manifest download for %d URLs", len(urls))
+
     semaphore = asyncio.Semaphore(concurrency)
     async with httpx.AsyncClient() as client:
         tasks = [
@@ -145,6 +193,9 @@ async def main(
             for url in urls
         ]
         await asyncio.gather(*tasks)
+
+    duration = time.perf_counter() - start_time
+    logger.info("Manifest download completed in %.1f seconds", duration)
 
 
 def fetch_sacatalog_records(symbols: Iterable[str]) -> list[Mapping[str, str]]:
@@ -174,8 +225,46 @@ def iso_date(date_str: str) -> str:
     raise ValueError(f"Unable to parse date value {date_str!r}")
 
 
-def build_zip_url(area_symbol: str, date_iso: str) -> str:
-    return ZIP_URL_TEMPLATE.format(area_symbol=area_symbol, date=date_iso)
+def _region_candidates(area_symbol: str) -> tuple[str, ...]:
+    prefix = area_symbol[:2].upper()
+    if prefix == "US":
+        return ("US",)
+    return ("US", prefix)
+
+
+def build_zip_url(area_symbol: str, date_iso: str, region: str = "US") -> str:
+    return ZIP_URL_TEMPLATE.format(
+        area_symbol=area_symbol,
+        region=region,
+        date=date_iso,
+    )
+
+
+async def _fetch_with_region_candidates(
+    client: httpx.AsyncClient,
+    area_symbol: str,
+    date_iso: str,
+) -> tuple[str, bytes]:
+    """
+    Try downloading the ZIP using the provided region candidates.
+    Returns the URL that worked and the downloaded bytes.
+    """
+    last_exception: httpx.HTTPStatusError | None = None
+
+    for region in _region_candidates(area_symbol):
+        url = build_zip_url(area_symbol, date_iso, region=region)
+        logger.info("Attempting download for %s (%s): %s", area_symbol, region, url)
+        try:
+            zip_bytes = await fetch_zip(client, url)
+        except httpx.HTTPStatusError as exc:
+            logger.warning("Download failed for %s (%s): HTTP %s", area_symbol, region, exc.response.status_code)
+            last_exception = exc
+            continue
+        return url, zip_bytes
+
+    if last_exception:
+        raise last_exception
+    raise RuntimeError(f"No download attempts were made for {area_symbol}")
 
 
 async def download_area_symbol_package(
@@ -199,13 +288,11 @@ async def download_area_symbol_package(
         raise ValueError(f"No saverest date available for {area_symbol}")
 
     date_iso = iso_date(date_value)
-    zip_url = build_zip_url(area_symbol, date_iso)
-    logger.info("Downloading NRCS ZIP for %s: %s", area_symbol, zip_url)
 
     async with httpx.AsyncClient() as client:
-        zip_bytes = await fetch_zip_with_progress(client, zip_url, desc=f"Downloading {area_symbol}")
+        _, zip_bytes = await _fetch_with_region_candidates(client, area_symbol, date_iso)
 
-    upload_archive(zip_bytes, bucket_name=bucket_name, path_prefix=prefix_path, show_progress=True)
+    upload_archive(zip_bytes, bucket_name=bucket_name, path_prefix=prefix_path)
 
 
 def run_from_cli(args: Sequence[str] | None = None) -> None:

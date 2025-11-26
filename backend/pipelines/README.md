@@ -10,7 +10,7 @@ The wrapper ensures the project root is on `sys.path`, so you can keep running `
 | --- | --- |
 | `-m`/`--manifest <path>` | Download every URL listed in the file, uncompress each archive, and upload to GCS. |
 | `-a`/`--area-symbol <symbol>` | Fetch the `saverest` date from NRCS (`sacatalog`), build the Web Soil Survey ZIP URL (logs it), download that single package, and upload it. Ideal for quick smoke tests. |
-| `-b`/`--bucket <name>` | Override the target bucket (defaults to `GCS_BUCKET` env var or `soil-raw`). |
+| `-b`/`--bucket <name>` | Override the target bucket (defaults to `GCS_BUCKET` env var or `soil-parcels-of`). |
 | `-c`/`--concurrency <n>` | Number of concurrent downloads when you use `--manifest` (default: `50`). |
 
 ### Generate area symbol download URLs
@@ -24,7 +24,7 @@ python -m pipelines.area_symbols_to_urls --output area-symbol-urls.tsv
 
 The script logs warnings for any symbols with missing dates and skips them. Pass `--limit 10` during development to only resolve the first ten area symbols.
 
-When you need to test just one area symbol before a mass ingest (e.g., `--area-symbol CA805`), the utility queries `sacatalog` with `SELECT areasymbol, saverest FROM sacatalog WHERE areasymbol IN (...)`, converts the returned date to `YYYY-MM-DD`, constructs a URL such as `https://websoilsurvey.sc.egov.usda.gov/DSD/Download/Cache/SSA/wss_SSA_CA805_soildb_US_2003_[2025-09-09].zip`, logs it, and uploads the unzipped contents.
+When you need to test just one area symbol before a mass ingest (e.g., `--area-symbol CA805`), the utility queries `sacatalog` with `SELECT areasymbol, saverest FROM sacatalog WHERE areasymbol IN (...)`, converts the returned date to `YYYY-MM-DD`, and builds `wss_SSA_<symbol>_soildb_<region>_2003_[<date>].zip`. It first tries the `US` download and, if that 400s, retries with the area-symbol’s two-letter prefix (`AK`, `HI`, etc.), logs which URL succeeded, and uploads the unzipped contents.
 
 Set `GCS_BUCKET=soil-parcels-of` (or pass `--bucket soil-parcels-of`) to stage those smoke-test downloads alongside your production data.
 

@@ -38,6 +38,19 @@ def test_invalid_type_lat_lon():
     response = client.get("/soil", params={"lon": -122.44, "lat": "cde"})
     assert response.status_code == 422
 
+
+def test_get_area_symbols(monkeypatch):
+    responses = {"Table": [["CA803"], ["CA805"], [123], []]}
+
+    def fake_post(payload):
+        assert "legend" in payload["query"]
+        return responses
+
+    monkeypatch.setattr(soil, "post_to_sdm", fake_post)
+
+    symbols = soil.get_area_symbols()
+    assert symbols == ["CA803", "CA805"]
+
 def test_one_mapunit_sent():
     """
     When the user clicks on a point that map should only produce the parcel connected to 

@@ -123,6 +123,6 @@ def test_download_area_symbol_package(monkeypatch, caplog):
         ),
     )
 
-    assert recorded_paths == ["test.txt"]
+    assert recorded_paths == ["CA805/test.txt"]
     assert urls and "2025-09-09" in urls[0]
     assert "2025-09-09" in caplog.text
