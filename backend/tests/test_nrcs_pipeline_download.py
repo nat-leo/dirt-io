@@ -48,6 +48,43 @@ def _make_dummy_zip() -> bytes:
     return buf.getvalue()
 
 
+def test_upload_archive_with_custom_prefix(monkeypatch):
+    zip_bytes = _make_dummy_zip()
+    captured: list[str] = []
+
+    def fake_upload(path: str, data: bytes, *, bucket_name: str | None = None, **kwargs):
+        captured.append(path)
+
+    monkeypatch.setattr(nrcs_to_google_cloud_storage, "upload_to_gcs", fake_upload)
+
+    nrcs_to_google_cloud_storage.upload_archive(
+        zip_bytes,
+        bucket_name="soil-parcels-of",
+        path_prefix="custom-prefix",
+        show_progress=False,
+    )
+
+    assert captured == ["custom-prefix/test.txt"]
+
+
+def test_upload_archive_without_prefix(monkeypatch):
+    zip_bytes = _make_dummy_zip()
+    captured: list[str] = []
+
+    def fake_upload(path: str, data: bytes, *, bucket_name: str | None = None, **kwargs):
+        captured.append(path)
+
+    monkeypatch.setattr(nrcs_to_google_cloud_storage, "upload_to_gcs", fake_upload)
+
+    nrcs_to_google_cloud_storage.upload_archive(
+        zip_bytes,
+        bucket_name="soil-parcels-of",
+        show_progress=False,
+    )
+
+    assert captured == ["test.txt"]
+
+
 def test_download_area_symbol_package(monkeypatch, caplog):
     zip_bytes = _make_dummy_zip()
     urls: list[str] = []

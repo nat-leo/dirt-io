@@ -35,7 +35,7 @@ cd backend
 GCS_BUCKET=soil-parcels-of python -m pipelines.nrcs_to_google_cloud_storage --area-symbol CA805
 ```
 
-The tool logs the zip URL it downloads (`INFO` level), and you’ll see `tqdm` progress bars for the download and unzipping/upload stages so you can gauge how long the full workflow takes. The files are uploaded under `gs://soil-parcels-of/CA805/` so each symbol lands in its own directory. Before running it, authenticate with Google Cloud (`gcloud auth application-default login` or `gcloud auth login` + `export GOOGLE_APPLICATION_CREDENTIALS=/path/to/key.json`) so the bucket accepts your upload.
+The tool logs the zip URL it downloads (`INFO` level), and you’ll see `tqdm` progress bars for the download and unzipping/upload stages so you can gauge how long the full workflow takes. The files are uploaded directly into the bucket root (e.g., `gs://soil-parcels-of/CA805/`) unless you override `GCS_PREFIX`. Before running, authenticate with Google Cloud (`gcloud auth application-default login` or `gcloud auth login` + `export GOOGLE_APPLICATION_CREDENTIALS=/path/to/key.json`) so the bucket accepts your upload.
 
 ## Skippable integration check
 
