@@ -88,7 +88,7 @@ def test_upload_archive_without_prefix(monkeypatch):
 def test_download_area_symbol_package(monkeypatch, caplog):
     zip_bytes = _make_dummy_zip()
     urls: list[str] = []
-    uploads: list[tuple[bytes, str | None]] = []
+    recorded_paths: list[str] = []
 
     def fake_records(symbols):
         assert list(symbols) == ["CA805"]
@@ -98,14 +98,14 @@ def test_download_area_symbol_package(monkeypatch, caplog):
         urls.append(url)
         return zip_bytes
 
-    def fake_upload_archive(
+    def fake_upload_to_gcs(
+        path: str,
         data: bytes,
         *,
         bucket_name: str | None = None,
-        path_prefix: str | None = None,
-        show_progress: bool = False,
+        **kwargs,
     ) -> None:
-        uploads.append((data, bucket_name, path_prefix, show_progress))
+        recorded_paths.append(path)
 
     monkeypatch.setattr(nrcs_to_google_cloud_storage, "fetch_sacatalog_records", fake_records)
     monkeypatch.setattr(
@@ -113,7 +113,7 @@ def test_download_area_symbol_package(monkeypatch, caplog):
         "fetch_zip_with_progress",
         fake_fetch_zip,
     )
-    monkeypatch.setattr(nrcs_to_google_cloud_storage, "upload_archive", fake_upload_archive)
+    monkeypatch.setattr(nrcs_to_google_cloud_storage, "upload_to_gcs", fake_upload_to_gcs)
 
     caplog.set_level(logging.INFO)
     asyncio.run(
@@ -123,9 +123,6 @@ def test_download_area_symbol_package(monkeypatch, caplog):
         ),
     )
 
-    assert uploads, "Expected the zip bytes to be handed off for upload"
-    assert uploads[0][1] == "soil-parcels-of"
-    assert uploads[0][2] == "CA805"
-    assert uploads[0][3] is True
+    assert recorded_paths == ["test.txt"]
     assert urls and "2025-09-09" in urls[0]
     assert "2025-09-09" in caplog.text

@@ -28,7 +28,7 @@ ZIP_URL_TEMPLATE = (
 )
 CONCURRENCY = 50
 DEFAULT_GCS_BUCKET = os.getenv("GCS_BUCKET", "soil-raw")
-DEFAULT_GCS_PREFIX = os.getenv("GCS_PREFIX", "").strip()
+DEFAULT_GCS_PREFIX = None
 _storage_buckets: Dict[str, storage.bucket.Bucket] = {}
 
 
@@ -94,9 +94,9 @@ def upload_archive(
             with archive.open(name) as fileobj:
                 data = fileobj.read()
 
-            prefix = path_prefix or DEFAULT_GCS_PREFIX
+            prefix = path_prefix or None
             gcs_path = f"{prefix}/{name}" if prefix else name
-            upload_to_gcs(gcs_path, data, bucket_name=bucket_name)
+            upload_to_gcs(gcs_path, data, bucket_name=bucket_name, path_prefix=gcs_path)
             if progress:
                 progress.update(1)
 
@@ -180,7 +180,7 @@ def build_zip_url(area_symbol: str, date_iso: str) -> str:
 
 async def download_area_symbol_package(
     area_symbol: str,
-    *,
+    prefix_path: str | None = None,
     bucket_name: str | None = None,
 ) -> None:
     """
@@ -205,7 +205,7 @@ async def download_area_symbol_package(
     async with httpx.AsyncClient() as client:
         zip_bytes = await fetch_zip_with_progress(client, zip_url, desc=f"Downloading {area_symbol}")
 
-    upload_archive(zip_bytes, bucket_name=bucket_name, show_progress=True, path_prefix=None)
+    upload_archive(zip_bytes, bucket_name=bucket_name, path_prefix=prefix_path, show_progress=True)
 
 
 def run_from_cli(args: Sequence[str] | None = None) -> None:
